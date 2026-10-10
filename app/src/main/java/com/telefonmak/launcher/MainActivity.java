@@ -17,6 +17,10 @@ import java.util.*;
 public class MainActivity extends Activity {
   final int navy=Color.rgb(22,42,68), bg=Color.rgb(245,247,250), green=Color.rgb(16,125,68);
   LinearLayout root, body;
+  ProgressBar batteryBar;
+  TextView batteryLabel;
+  final BroadcastReceiver batteryReceiver=new BroadcastReceiver(){@Override public void onReceive(Context context,Intent intent){refreshBattery(intent);}};
+  boolean batteryRegistered=false;
   ArrayList<Person> people=new ArrayList<>();
   static class Person {String name,number,photo; Person(String n,String p,String ph){name=n;number=p;photo=ph;}}
   int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
@@ -24,9 +28,33 @@ public class MainActivity extends Activity {
   GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
   @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setStatusBarColor(bg);getWindow().setNavigationBarColor(bg);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);if(android.os.Build.VERSION.SDK_INT>=23 && checkSelfPermission(Manifest.permission.READ_CONTACTS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.READ_CONTACTS,Manifest.permission.CALL_PHONE},7);showContacts();}
   @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){super.onRequestPermissionsResult(r,p,g);showContacts();}
+  void refreshBattery(Intent intent){
+    if(intent==null || batteryBar==null || batteryLabel==null)return;
+    int level=intent.getIntExtra(BatteryManager.EXTRA_LEVEL,-1);
+    int scale=intent.getIntExtra(BatteryManager.EXTRA_SCALE,100);
+    if(level<0 || scale<=0)return;
+    int percent=Math.max(0,Math.min(100,Math.round(level*100f/scale)));
+    int color=percent<=15?Color.rgb(230,55,57):Color.rgb(46,165,245);
+    batteryBar.setProgress(percent);
+    batteryBar.setProgressTintList(android.content.res.ColorStateList.valueOf(color));
+    batteryLabel.setText(percent+"%");
+  }
+  @Override protected void onStart(){super.onStart();if(!batteryRegistered){registerReceiver(batteryReceiver,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));batteryRegistered=true;}}
+  @Override protected void onStop(){if(batteryRegistered){unregisterReceiver(batteryReceiver);batteryRegistered=false;}super.onStop();}
   void frame(String title){
     root=new LinearLayout(this);root.setOrientation(1);root.setBackgroundColor(bg);
     root.setPadding(dp(8),dp(5),dp(8),dp(6));setContentView(root);
+    LinearLayout batteryHeader=new LinearLayout(this);batteryHeader.setGravity(Gravity.CENTER_VERTICAL);
+    batteryHeader.setOrientation(0);batteryHeader.setPadding(dp(14),0,dp(14),0);
+    batteryHeader.setBackground(shape(Color.rgb(16,30,48),16));
+    LinearLayout.LayoutParams headerLp=new LinearLayout.LayoutParams(-1,dp(48));
+    headerLp.setMargins(dp(2),0,dp(2),dp(7));root.addView(batteryHeader,headerLp);
+    TextView batteryIcon=text("▰",19,Color.WHITE,true);batteryHeader.addView(batteryIcon,new LinearLayout.LayoutParams(dp(34),-1));
+    batteryBar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+    batteryBar.setMax(100);batteryBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(61,72,87)));
+    LinearLayout.LayoutParams barLp=new LinearLayout.LayoutParams(0,dp(14),1);barLp.setMargins(dp(5),0,dp(10),0);batteryHeader.addView(batteryBar,barLp);
+    batteryLabel=text("--%",19,Color.WHITE,true);batteryHeader.addView(batteryLabel,new LinearLayout.LayoutParams(dp(65),-1));
+    refreshBattery(registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED)));
     if(title!=null && !title.isEmpty()){TextView h=text(title,26,navy,true);h.setGravity(Gravity.CENTER_VERTICAL);root.addView(h,new LinearLayout.LayoutParams(-1,dp(52)));}
     body=new LinearLayout(this);body.setOrientation(1);root.addView(body,new LinearLayout.LayoutParams(-1,0,1));
     LinearLayout dock=new LinearLayout(this);dock.setOrientation(0);root.addView(dock,new LinearLayout.LayoutParams(-1,dp(90)));
@@ -63,7 +91,7 @@ public class MainActivity extends Activity {
     if(people.isEmpty()){TextView empty=text("Tiada contact. Benarkan akses Contacts dalam Settings.",21,navy,true);body.addView(empty);}
   }
   void showPerson(Person p){
-    frame("Maklumat Contact");
+    frame("");
     ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);body.addView(scroll,new LinearLayout.LayoutParams(-1,-1));
     LinearLayout content=new LinearLayout(this);content.setOrientation(1);content.setGravity(Gravity.CENTER);
     content.setPadding(dp(8),dp(10),dp(8),dp(12));scroll.addView(content);
@@ -85,10 +113,10 @@ public class MainActivity extends Activity {
     }
     TextView name=text(p.name,32,navy,true);name.setPadding(0,dp(18),0,dp(10));content.addView(name);
     TextView number=text(p.number,23,navy,false);content.addView(number);
-    TextView call=text("☎  CALL",30,Color.WHITE,true);call.setBackground(shape(green,18));
+    TextView call=text("☎  PANGGIL",30,Color.WHITE,true);call.setBackground(shape(green,18));
     LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,dp(94));cp.setMargins(dp(8),dp(26),dp(8),dp(10));content.addView(call,cp);
     call.setOnClickListener(v->call(p.number));
-    TextView back=text("KEMBALI",23,navy,true);content.addView(back,new LinearLayout.LayoutParams(-1,dp(68)));
+    TextView back=text("←  KEMBALI",23,navy,true);back.setBackground(shape(Color.rgb(228,238,250),18));content.addView(back,new LinearLayout.LayoutParams(-1,dp(68)));
     back.setOnClickListener(v->showContacts());
   }
   void call(String number){
