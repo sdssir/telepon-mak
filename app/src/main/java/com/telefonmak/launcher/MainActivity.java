@@ -62,8 +62,53 @@ public class MainActivity extends Activity {
     }
     if(people.isEmpty()){TextView empty=text("Tiada contact. Benarkan akses Contacts dalam Settings.",21,navy,true);body.addView(empty);}
   }
-  void showPerson(Person p){frame("Maklumat Contact");LinearLayout content=new LinearLayout(this);content.setOrientation(1);content.setGravity(Gravity.CENTER);body.addView(content,new LinearLayout.LayoutParams(-1,-1));TextView initial=text(p.name.substring(0,1).toUpperCase(Locale.getDefault()),90,navy,true);initial.setBackground(shape(Color.rgb(220,233,247),20));content.addView(initial,new LinearLayout.LayoutParams(dp(170),dp(170)));TextView name=text(p.name,32,navy,true);name.setPadding(0,dp(18),0,dp(12));content.addView(name);TextView number=text(p.number,23,navy,false);content.addView(number);TextView call=text("☎  CALL",30,Color.WHITE,true);call.setBackground(shape(green,18));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,dp(94));cp.setMargins(dp(12),dp(28),dp(12),dp(10));content.addView(call,cp);call.setOnClickListener(v->call(p.number));TextView back=text("KEMBALI",23,navy,true);content.addView(back,new LinearLayout.LayoutParams(-1,dp(68)));back.setOnClickListener(v->showContacts());}
-  void call(String number){if(android.os.Build.VERSION.SDK_INT>=23&&checkSelfPermission(Manifest.permission.CALL_PHONE)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.CALL_PHONE},8);return;}try{startActivity(new Intent(Intent.ACTION_CALL,Uri.parse("tel:"+Uri.encode(number))));}catch(Exception e){startActivity(new Intent(Intent.ACTION_DIAL,Uri.parse("tel:"+Uri.encode(number))));}}
+  void showPerson(Person p){
+    frame("Maklumat Contact");
+    ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);body.addView(scroll,new LinearLayout.LayoutParams(-1,-1));
+    LinearLayout content=new LinearLayout(this);content.setOrientation(1);content.setGravity(Gravity.CENTER);
+    content.setPadding(dp(8),dp(10),dp(8),dp(12));scroll.addView(content);
+    int photoSize=Math.min(dp(290),getResources().getDisplayMetrics().widthPixels-dp(52));
+    android.widget.FrameLayout avatar=new android.widget.FrameLayout(this);
+    avatar.setBackground(shape(Color.rgb(220,233,247),24));avatar.setClipToOutline(true);
+    content.addView(avatar,new LinearLayout.LayoutParams(photoSize,photoSize));
+    boolean loaded=false;
+    if(p.photo!=null){
+      try{
+        ImageView photo=new ImageView(this);photo.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        photo.setImageURI(Uri.parse(p.photo));
+        if(photo.getDrawable()!=null){avatar.addView(photo,new android.widget.FrameLayout.LayoutParams(-1,-1));loaded=true;}
+      }catch(Exception ignored){}
+    }
+    if(!loaded){
+      TextView initial=text(p.name.substring(0,1).toUpperCase(Locale.getDefault()),108,navy,true);
+      avatar.addView(initial,new android.widget.FrameLayout.LayoutParams(-1,-1));
+    }
+    TextView name=text(p.name,32,navy,true);name.setPadding(0,dp(18),0,dp(10));content.addView(name);
+    TextView number=text(p.number,23,navy,false);content.addView(number);
+    TextView call=text("☎  CALL",30,Color.WHITE,true);call.setBackground(shape(green,18));
+    LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,dp(94));cp.setMargins(dp(8),dp(26),dp(8),dp(10));content.addView(call,cp);
+    call.setOnClickListener(v->call(p.number));
+    TextView back=text("KEMBALI",23,navy,true);content.addView(back,new LinearLayout.LayoutParams(-1,dp(68)));
+    back.setOnClickListener(v->showContacts());
+  }
+  void call(String number){
+    if(android.os.Build.VERSION.SDK_INT>=23&&checkSelfPermission(Manifest.permission.CALL_PHONE)!=PackageManager.PERMISSION_GRANTED){
+      requestPermissions(new String[]{Manifest.permission.CALL_PHONE},8);return;
+    }
+    Uri tel=Uri.parse("tel:"+Uri.encode(number));
+    try{
+      // Request speakerphone on call start. The stock dialer/carrier may ignore this hint.
+      android.telecom.TelecomManager telecom=(android.telecom.TelecomManager)getSystemService(Context.TELECOM_SERVICE);
+      if(telecom!=null){
+        Bundle extras=new Bundle();
+        extras.putBoolean(android.telecom.TelecomManager.EXTRA_START_CALL_WITH_SPEAKERPHONE,true);
+        telecom.placeCall(tel,extras);
+        return;
+      }
+    }catch(Exception ignored){}
+    try{startActivity(new Intent(Intent.ACTION_CALL,tel));}
+    catch(Exception e){startActivity(new Intent(Intent.ACTION_DIAL,tel));}
+  }
   void showApps(){frame("Aplikasi Lain");ScrollView scroll=new ScrollView(this);body.addView(scroll);LinearLayout list=new LinearLayout(this);list.setOrientation(1);scroll.addView(list);Intent query=new Intent(Intent.ACTION_MAIN);query.addCategory(Intent.CATEGORY_LAUNCHER);PackageManager pm=getPackageManager();List<ResolveInfo> apps=pm.queryIntentActivities(query,0);Collections.sort(apps,(a,b)->a.loadLabel(pm).toString().compareToIgnoreCase(b.loadLabel(pm).toString()));for(ResolveInfo a:apps){if(a.activityInfo.packageName.equals(getPackageName()))continue;TextView t=text(a.loadLabel(pm).toString(),23,navy,true);t.setGravity(Gravity.CENTER_VERTICAL);t.setPadding(dp(20),0,dp(8),0);t.setBackground(shape(Color.WHITE,12));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(72));lp.setMargins(0,dp(3),0,dp(3));list.addView(t,lp);t.setOnClickListener(v->{try{Intent launch=new Intent(Intent.ACTION_MAIN);launch.addCategory(Intent.CATEGORY_LAUNCHER);launch.setClassName(a.activityInfo.packageName,a.activityInfo.name);launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);startActivity(launch);}catch(Exception ignored){}});}}
   @Override public void onBackPressed(){showContacts();}
 }
