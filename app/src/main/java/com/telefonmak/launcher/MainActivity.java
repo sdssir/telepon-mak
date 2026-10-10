@@ -30,8 +30,8 @@ public class MainActivity extends Activity {
     if(title!=null && !title.isEmpty()){TextView h=text(title,26,navy,true);h.setGravity(Gravity.CENTER_VERTICAL);root.addView(h,new LinearLayout.LayoutParams(-1,dp(52)));}
     body=new LinearLayout(this);body.setOrientation(1);root.addView(body,new LinearLayout.LayoutParams(-1,0,1));
     LinearLayout dock=new LinearLayout(this);dock.setOrientation(0);root.addView(dock,new LinearLayout.LayoutParams(-1,dp(90)));
-    dockButton(dock,"☎\\nCONTACTS",green,()->showContacts());
-    dockButton(dock,"▦\\nAPPS",Color.rgb(18,105,231),()->showApps());
+    dockButton(dock,"☎\nCONTACTS",green,()->showContacts());
+    dockButton(dock,"▦\nAPPS",Color.rgb(18,105,231),()->showApps());
   }
   void dockButton(LinearLayout row,String label,int color,Runnable run){
     TextView b=text(label,20,Color.WHITE,true);b.setBackground(shape(color,19));
