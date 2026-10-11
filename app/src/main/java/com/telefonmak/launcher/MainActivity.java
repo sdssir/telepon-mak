@@ -136,7 +136,10 @@ public class MainActivity extends Activity {
   }
   void hideDockForGallery(){
     // Remove the launcher dock from gallery and photo viewer to use all available space.
-    if(root.getChildCount()>0)root.removeViewAt(root.getChildCount()-1);
+    if(root.getChildCount()>0){
+      View last=root.getChildAt(root.getChildCount()-1);
+      if(last instanceof LinearLayout && last!=body && last.getLayoutParams()!=null && last.getLayoutParams().height==dp(90))root.removeView(last);
+    }
   }
   void showGallery(){
     currentScreen=2;
@@ -151,7 +154,6 @@ public class MainActivity extends Activity {
       else requestPermissions(new String[]{perm},REQUEST_PHOTOS);
       return;
     }
-    hideDockForGallery();
     galleryBackButton(body,"KEMBALI KE CONTACT",()->showContacts());
     TextView loading=text("MEMUATKAN GAMBAR...",21,navy,true);
     body.addView(loading,new LinearLayout.LayoutParams(-1,dp(70)));
