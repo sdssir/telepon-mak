@@ -26,6 +26,9 @@ public class MainActivity extends Activity {
   ArrayList<Person> people=new ArrayList<>();
   ArrayList<Uri> galleryImages=new ArrayList<>();
   int galleryPosition=0;
+  int photoLoadToken=0;
+  ImageView fullPhotoView;
+  TextView fullPhotoCount;
   int currentScreen=0;
   final int REQUEST_PHOTOS=29;
   static class Person {String name,number,photo; Person(String n,String p,String ph){name=n;number=p;photo=ph;}}
@@ -131,9 +134,14 @@ public class MainActivity extends Activity {
     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(65));lp.setMargins(dp(3),dp(3),dp(3),dp(9));
     parent.addView(back,lp);back.setOnClickListener(v->action.run());
   }
+  void hideDockForGallery(){
+    // Remove the launcher dock from gallery and photo viewer to use all available space.
+    if(root.getChildCount()>0)root.removeViewAt(root.getChildCount()-1);
+  }
   void showGallery(){
     currentScreen=2;
     frame("");
+    hideDockForGallery();
     if(!hasGalleryPermission()){
       TextView permission=text("BENARKAN AKSES GAMBAR",24,navy,true);
       body.addView(permission,new LinearLayout.LayoutParams(-1,dp(100)));
@@ -143,6 +151,7 @@ public class MainActivity extends Activity {
       else requestPermissions(new String[]{perm},REQUEST_PHOTOS);
       return;
     }
+    hideDockForGallery();
     galleryBackButton(body,"KEMBALI KE CONTACT",()->showContacts());
     TextView loading=text("MEMUATKAN GAMBAR...",21,navy,true);
     body.addView(loading,new LinearLayout.LayoutParams(-1,dp(70)));
@@ -168,27 +177,81 @@ public class MainActivity extends Activity {
   }
   void showFullPhoto(int position){
     if(position<0||position>=galleryImages.size()){showGallery();return;}
-    currentScreen=3;galleryPosition=position;frame("");
-    galleryBackButton(body,"KEMBALI KE GALERI",()->showGallery());
-    ImageView full=new ImageView(this);full.setScaleType(ImageView.ScaleType.FIT_CENTER);
-    full.setBackgroundColor(Color.BLACK);
-    body.addView(full,new LinearLayout.LayoutParams(-1,0,1));
-    try{full.setImageURI(galleryImages.get(position));}catch(Exception ignored){}
+    currentScreen=3;
+    frame("");
+    hideDockForGallery();
+    body.setBackgroundColor(Color.BLACK);
+    android.widget.FrameLayout viewer=new android.widget.FrameLayout(this);
+    body.addView(viewer,new LinearLayout.LayoutParams(-1,0,1));
+    fullPhotoView=new ImageView(this);
+    fullPhotoView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+    fullPhotoView.setBackgroundColor(Color.BLACK);
+    viewer.addView(fullPhotoView,new android.widget.FrameLayout.LayoutParams(-1,-1));
+    TextView back=text("←  KEMBALI",22,Color.WHITE,true);
+    back.setBackground(shape(0xBB162A44,15));
+    android.widget.FrameLayout.LayoutParams bp=new android.widget.FrameLayout.LayoutParams(dp(175),dp(64),Gravity.TOP|Gravity.LEFT);
+    bp.setMargins(dp(12),dp(12),0,0);
+    viewer.addView(back,bp);
+    back.setOnClickListener(v->showGallery());
+    fullPhotoCount=text("",18,Color.WHITE,true);
+    fullPhotoCount.setBackground(shape(0x99000000,12));
+    android.widget.FrameLayout.LayoutParams cp=new android.widget.FrameLayout.LayoutParams(dp(100),dp(42),Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
+    cp.setMargins(0,0,0,dp(16));viewer.addView(fullPhotoCount,cp);
     final float[] touchX={0};
-    full.setOnTouchListener((v,event)->{
+    fullPhotoView.setOnTouchListener((v,event)->{
       if(event.getAction()==MotionEvent.ACTION_DOWN){touchX[0]=event.getX();return true;}
       if(event.getAction()==MotionEvent.ACTION_UP){
         float dx=event.getX()-touchX[0];
-        if(Math.abs(dx)>dp(65)){
+        if(Math.abs(dx)>dp(55)){
           int next=galleryPosition+(dx<0?1:-1);
-          if(next>=0&&next<galleryImages.size())showFullPhoto(next);
+          if(next>=0&&next<galleryImages.size())displayPhoto(next,dx<0);
         }
         return true;
       }
       return true;
     });
-    TextView count=text((position+1)+" / "+galleryImages.size(),18,navy,true);
-    body.addView(count,new LinearLayout.LayoutParams(-1,dp(36)));
+    displayPhoto(position,true);
+  }
+  void displayPhoto(int position,boolean forward){
+    galleryPosition=position;
+    int token=++photoLoadToken;
+    fullPhotoCount.setText((position+1)+" / "+galleryImages.size());
+    ImageView target=fullPhotoView;
+    Uri uri=galleryImages.get(position);
+    // Decode off the UI thread with sampling to prevent freezes and memory spikes.
+    new Thread(()->{
+      Bitmap bitmap=null;
+      try{
+        BitmapFactory.Options bounds=new BitmapFactory.Options();
+        bounds.inJustDecodeBounds=true;
+        try(java.io.InputStream stream=getContentResolver().openInputStream(uri)){
+          if(stream!=null)BitmapFactory.decodeStream(stream,null,bounds);
+        }
+        int sample=1;
+        while(bounds.outWidth/sample>2048||bounds.outHeight/sample>2048)sample*=2;
+        BitmapFactory.Options options=new BitmapFactory.Options();
+        options.inSampleSize=sample;
+        try(java.io.InputStream stream=getContentResolver().openInputStream(uri)){
+          if(stream!=null)bitmap=BitmapFactory.decodeStream(stream,null,options);
+        }
+      }catch(Exception ignored){}
+      final Bitmap ready=bitmap;
+      runOnUiThread(()->{
+        if(token!=photoLoadToken||currentScreen!=3||target!=fullPhotoView){
+          if(ready!=null)ready.recycle();
+          return;
+        }
+        if(ready!=null){
+          target.animate().cancel();
+          target.setAlpha(0f);
+          target.setTranslationX(dp(forward?28:-28));
+          target.setImageBitmap(ready);
+          target.animate().alpha(1f).translationX(0).setDuration(260).start();
+        }else{
+          target.setImageDrawable(null);
+        }
+      });
+    }).start();
   }
   void showPerson(Person p){
     frame("");
