@@ -108,10 +108,11 @@ public class MainActivity extends Activity {
     TextView label=text("▧\nGAMBAR",24,Color.WHITE,true);
     tile.addView(label,new android.widget.FrameLayout.LayoutParams(-1,-1));
     tile.setOnClickListener(v->showGallery());
+    label.setOnClickListener(v->showGallery());
   }
   boolean hasGalleryPermission(){
     String permission=Build.VERSION.SDK_INT>=33?Manifest.permission.READ_MEDIA_IMAGES:Manifest.permission.READ_EXTERNAL_STORAGE;
-    return Build.VERSION.SDK_INT<23||checkSelfPermission(permission)==PackageManager.PERMISSION_GRANTED;
+    return Build.VERSION.SDK_INT<23||checkSelfPermission(permission)==PackageManager.PERMISSION_GRANTED||(Build.VERSION.SDK_INT>=34&&checkSelfPermission("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")==PackageManager.PERMISSION_GRANTED);
   }
   void loadGallery(){
     galleryImages.clear();
@@ -138,11 +139,17 @@ public class MainActivity extends Activity {
       body.addView(permission,new LinearLayout.LayoutParams(-1,dp(100)));
       galleryBackButton(body,"KEMBALI KE CONTACT",()->showContacts());
       String perm=Build.VERSION.SDK_INT>=33?Manifest.permission.READ_MEDIA_IMAGES:Manifest.permission.READ_EXTERNAL_STORAGE;
-      requestPermissions(new String[]{perm},REQUEST_PHOTOS);
+      if(Build.VERSION.SDK_INT>=34)requestPermissions(new String[]{perm,"android.permission.READ_MEDIA_VISUAL_USER_SELECTED"},REQUEST_PHOTOS);
+      else requestPermissions(new String[]{perm},REQUEST_PHOTOS);
       return;
     }
-    loadGallery();
     galleryBackButton(body,"KEMBALI KE CONTACT",()->showContacts());
+    TextView loading=text("MEMUATKAN GAMBAR...",21,navy,true);
+    body.addView(loading,new LinearLayout.LayoutParams(-1,dp(70)));
+    new Thread(()->{loadGallery();runOnUiThread(()->{if(currentScreen==2)renderGallery(loading);});}).start();
+  }
+  void renderGallery(TextView loading){
+    body.removeView(loading);
     ScrollView scroll=new ScrollView(this);body.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     android.widget.GridLayout grid=new android.widget.GridLayout(this);grid.setColumnCount(3);scroll.addView(grid);
     int w=(getResources().getDisplayMetrics().widthPixels-dp(34))/3;
@@ -153,10 +160,8 @@ public class MainActivity extends Activity {
       android.widget.GridLayout.LayoutParams lp=new android.widget.GridLayout.LayoutParams();
       lp.width=w;lp.height=w;lp.setMargins(dp(2),dp(2),dp(2),dp(2));grid.addView(image,lp);
       // Downsample thumbnails instead of decoding every full-resolution image.
-      try{
-        android.graphics.Bitmap bitmap=getContentResolver().loadThumbnail(galleryImages.get(i),new android.util.Size(dp(200),dp(200)),null);
-        image.setImageBitmap(bitmap);
-      }catch(Exception ignored){}
+      final Uri thumbUri=galleryImages.get(i);
+      new Thread(()->{try{android.graphics.Bitmap bitmap=getContentResolver().loadThumbnail(thumbUri,new android.util.Size(dp(200),dp(200)),null);runOnUiThread(()->{if(currentScreen==2)image.setImageBitmap(bitmap);});}catch(Exception ignored){}}).start();
       image.setOnClickListener(v->showFullPhoto(position));
     }
     if(galleryImages.isEmpty())body.addView(text("Tiada gambar ditemui",23,navy,true));
