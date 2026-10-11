@@ -105,7 +105,7 @@ public class MainActivity extends Activity {
     tile.setBackground(shape(Color.rgb(23,103,212),16));tile.setClipToOutline(true);
     android.widget.GridLayout.LayoutParams lp=new android.widget.GridLayout.LayoutParams();
     lp.width=w;lp.height=dp(174);lp.setMargins(dp(2),dp(3),dp(2),dp(3));grid.addView(tile,lp);
-    TextView label=text("▧\\nGAMBAR",24,Color.WHITE,true);
+    TextView label=text("▧\nGAMBAR",24,Color.WHITE,true);
     tile.addView(label,new android.widget.FrameLayout.LayoutParams(-1,-1));
     tile.setOnClickListener(v->showGallery());
   }
