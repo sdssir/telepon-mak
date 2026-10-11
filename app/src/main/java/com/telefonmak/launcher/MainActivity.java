@@ -10,6 +10,8 @@ import android.graphics.*;
 import android.graphics.drawable.*;
 import android.net.Uri;
 import android.provider.ContactsContract;
+import android.provider.MediaStore;
+import android.content.ContentUris;
 import android.view.*;
 import android.widget.*;
 import java.util.*;
@@ -22,12 +24,19 @@ public class MainActivity extends Activity {
   final BroadcastReceiver batteryReceiver=new BroadcastReceiver(){@Override public void onReceive(Context context,Intent intent){refreshBattery(intent);}};
   boolean batteryRegistered=false;
   ArrayList<Person> people=new ArrayList<>();
+  ArrayList<Uri> galleryImages=new ArrayList<>();
+  int galleryPosition=0;
+  int currentScreen=0;
+  final int REQUEST_PHOTOS=29;
   static class Person {String name,number,photo; Person(String n,String p,String ph){name=n;number=p;photo=ph;}}
   int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
   TextView text(String s,int sp,int color,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(sp);t.setTextColor(color);t.setGravity(Gravity.CENTER);if(bold)t.setTypeface(null,1);return t;}
   GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
   @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setStatusBarColor(bg);getWindow().setNavigationBarColor(bg);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);if(android.os.Build.VERSION.SDK_INT>=23 && checkSelfPermission(Manifest.permission.READ_CONTACTS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.READ_CONTACTS,Manifest.permission.CALL_PHONE},7);showContacts();}
-  @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){super.onRequestPermissionsResult(r,p,g);showContacts();}
+  @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){
+    super.onRequestPermissionsResult(r,p,g);
+    if(r==REQUEST_PHOTOS)showGallery();else showContacts();
+  }
   void refreshBattery(Intent intent){
     if(intent==null || batteryBar==null || batteryLabel==null)return;
     int level=intent.getIntExtra(BatteryManager.EXTRA_LEVEL,-1);
@@ -67,7 +76,7 @@ public class MainActivity extends Activity {
   }
   void load(){people.clear();if(android.os.Build.VERSION.SDK_INT>=23&&checkSelfPermission(Manifest.permission.READ_CONTACTS)!=PackageManager.PERMISSION_GRANTED)return;Cursor c=null;try{c=getContentResolver().query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,new String[]{ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,ContactsContract.CommonDataKinds.Phone.NUMBER,ContactsContract.CommonDataKinds.Phone.PHOTO_URI},null,null,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" COLLATE NOCASE ASC");HashSet<String> seen=new HashSet<>();if(c!=null)while(c.moveToNext()){String n=c.getString(0),num=c.getString(1),ph=c.getString(2);if(n==null||num==null)continue;String key=n+"|"+num;if(seen.add(key))people.add(new Person(n,num,ph));}}catch(Exception ignored){}finally{if(c!=null)c.close();}}
   void showContacts(){
-    load();frame("");
+    currentScreen=0;load();frame("");
     ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);body.addView(scroll);
     android.widget.GridLayout grid=new android.widget.GridLayout(this);grid.setColumnCount(3);scroll.addView(grid);
     int w=(getResources().getDisplayMetrics().widthPixels-dp(34))/3;
@@ -88,7 +97,93 @@ public class MainActivity extends Activity {
       android.widget.FrameLayout.LayoutParams nameLp=new android.widget.FrameLayout.LayoutParams(-1,dp(70),Gravity.BOTTOM);tile.addView(name,nameLp);
       final long[] last={0};tile.setOnClickListener(v->{long now=SystemClock.elapsedRealtime();if(now-last[0]<550){last[0]=0;showPerson(p);}else last[0]=now;});
     }
+    addGalleryShortcut(grid,w);
     if(people.isEmpty()){TextView empty=text("Tiada contact. Benarkan akses Contacts dalam Settings.",21,navy,true);body.addView(empty);}
+  }
+  void addGalleryShortcut(android.widget.GridLayout grid,int w){
+    android.widget.FrameLayout tile=new android.widget.FrameLayout(this);
+    tile.setBackground(shape(Color.rgb(23,103,212),16));tile.setClipToOutline(true);
+    android.widget.GridLayout.LayoutParams lp=new android.widget.GridLayout.LayoutParams();
+    lp.width=w;lp.height=dp(174);lp.setMargins(dp(2),dp(3),dp(2),dp(3));grid.addView(tile,lp);
+    TextView label=text("▧\\nGAMBAR",24,Color.WHITE,true);
+    tile.addView(label,new android.widget.FrameLayout.LayoutParams(-1,-1));
+    tile.setOnClickListener(v->showGallery());
+  }
+  boolean hasGalleryPermission(){
+    String permission=Build.VERSION.SDK_INT>=33?Manifest.permission.READ_MEDIA_IMAGES:Manifest.permission.READ_EXTERNAL_STORAGE;
+    return Build.VERSION.SDK_INT<23||checkSelfPermission(permission)==PackageManager.PERMISSION_GRANTED;
+  }
+  void loadGallery(){
+    galleryImages.clear();
+    Cursor cursor=null;
+    try{
+      Uri collection=MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+      cursor=getContentResolver().query(collection,new String[]{MediaStore.Images.Media._ID},null,null,MediaStore.Images.Media.DATE_ADDED+" DESC");
+      if(cursor!=null)while(cursor.moveToNext()){
+        galleryImages.add(ContentUris.withAppendedId(collection,cursor.getLong(0)));
+      }
+    }catch(Exception ignored){}finally{if(cursor!=null)cursor.close();}
+  }
+  void galleryBackButton(LinearLayout parent,String label,Runnable action){
+    TextView back=text("←  "+label,22,navy,true);
+    back.setBackground(shape(Color.rgb(228,238,250),16));
+    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(65));lp.setMargins(dp(3),dp(3),dp(3),dp(9));
+    parent.addView(back,lp);back.setOnClickListener(v->action.run());
+  }
+  void showGallery(){
+    currentScreen=2;
+    frame("");
+    if(!hasGalleryPermission()){
+      TextView permission=text("BENARKAN AKSES GAMBAR",24,navy,true);
+      body.addView(permission,new LinearLayout.LayoutParams(-1,dp(100)));
+      galleryBackButton(body,"KEMBALI KE CONTACT",()->showContacts());
+      String perm=Build.VERSION.SDK_INT>=33?Manifest.permission.READ_MEDIA_IMAGES:Manifest.permission.READ_EXTERNAL_STORAGE;
+      requestPermissions(new String[]{perm},REQUEST_PHOTOS);
+      return;
+    }
+    loadGallery();
+    galleryBackButton(body,"KEMBALI KE CONTACT",()->showContacts());
+    ScrollView scroll=new ScrollView(this);body.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+    android.widget.GridLayout grid=new android.widget.GridLayout(this);grid.setColumnCount(3);scroll.addView(grid);
+    int w=(getResources().getDisplayMetrics().widthPixels-dp(34))/3;
+    for(int i=0;i<galleryImages.size();i++){
+      final int position=i;
+      ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+      image.setBackground(shape(Color.rgb(220,233,247),12));image.setClipToOutline(true);
+      android.widget.GridLayout.LayoutParams lp=new android.widget.GridLayout.LayoutParams();
+      lp.width=w;lp.height=w;lp.setMargins(dp(2),dp(2),dp(2),dp(2));grid.addView(image,lp);
+      // Downsample thumbnails instead of decoding every full-resolution image.
+      try{
+        android.graphics.Bitmap bitmap=getContentResolver().loadThumbnail(galleryImages.get(i),new android.util.Size(dp(200),dp(200)),null);
+        image.setImageBitmap(bitmap);
+      }catch(Exception ignored){}
+      image.setOnClickListener(v->showFullPhoto(position));
+    }
+    if(galleryImages.isEmpty())body.addView(text("Tiada gambar ditemui",23,navy,true));
+  }
+  void showFullPhoto(int position){
+    if(position<0||position>=galleryImages.size()){showGallery();return;}
+    currentScreen=3;galleryPosition=position;frame("");
+    galleryBackButton(body,"KEMBALI KE GALERI",()->showGallery());
+    ImageView full=new ImageView(this);full.setScaleType(ImageView.ScaleType.FIT_CENTER);
+    full.setBackgroundColor(Color.BLACK);
+    body.addView(full,new LinearLayout.LayoutParams(-1,0,1));
+    try{full.setImageURI(galleryImages.get(position));}catch(Exception ignored){}
+    final float[] touchX={0};
+    full.setOnTouchListener((v,event)->{
+      if(event.getAction()==MotionEvent.ACTION_DOWN){touchX[0]=event.getX();return true;}
+      if(event.getAction()==MotionEvent.ACTION_UP){
+        float dx=event.getX()-touchX[0];
+        if(Math.abs(dx)>dp(65)){
+          int next=galleryPosition+(dx<0?1:-1);
+          if(next>=0&&next<galleryImages.size())showFullPhoto(next);
+        }
+        return true;
+      }
+      return true;
+    });
+    TextView count=text((position+1)+" / "+galleryImages.size(),18,navy,true);
+    body.addView(count,new LinearLayout.LayoutParams(-1,dp(36)));
   }
   void showPerson(Person p){
     frame("");
@@ -138,5 +233,5 @@ public class MainActivity extends Activity {
     catch(Exception e){startActivity(new Intent(Intent.ACTION_DIAL,tel));}
   }
   void showApps(){frame("Aplikasi Lain");ScrollView scroll=new ScrollView(this);body.addView(scroll);LinearLayout list=new LinearLayout(this);list.setOrientation(1);scroll.addView(list);Intent query=new Intent(Intent.ACTION_MAIN);query.addCategory(Intent.CATEGORY_LAUNCHER);PackageManager pm=getPackageManager();List<ResolveInfo> apps=pm.queryIntentActivities(query,0);Collections.sort(apps,(a,b)->a.loadLabel(pm).toString().compareToIgnoreCase(b.loadLabel(pm).toString()));for(ResolveInfo a:apps){if(a.activityInfo.packageName.equals(getPackageName()))continue;TextView t=text(a.loadLabel(pm).toString(),23,navy,true);t.setGravity(Gravity.CENTER_VERTICAL);t.setPadding(dp(20),0,dp(8),0);t.setBackground(shape(Color.WHITE,12));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(72));lp.setMargins(0,dp(3),0,dp(3));list.addView(t,lp);t.setOnClickListener(v->{try{Intent launch=new Intent(Intent.ACTION_MAIN);launch.addCategory(Intent.CATEGORY_LAUNCHER);launch.setClassName(a.activityInfo.packageName,a.activityInfo.name);launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);startActivity(launch);}catch(Exception ignored){}});}}
-  @Override public void onBackPressed(){showContacts();}
+  @Override public void onBackPressed(){if(currentScreen==3)showGallery();else showContacts();}
 }
